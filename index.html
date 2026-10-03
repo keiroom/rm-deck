@@ -583,8 +583,8 @@ dialog .formgrid>div{margin-bottom:2px}
     <div class="formgrid">
       <div class="full"><label for="cs-mode">同期方式</label>
         <select id="cs-mode">
-          <option value="gas">Google Apps Script Web App（推奨・自動反映）</option>
-          <option value="ical">iCal URL（公開カレンダー／要CORSプロキシ）</option>
+          <option value="gas">Google Apps Script Web App ★推奨（出欠も取得・Drive保存も可）</option>
+          <option value="ical">iCal URL（公開カレンダーのみ・出欠/Drive保存は不可）</option>
         </select></div>
       <div class="full"><label for="cs-account">自分のメールアドレス</label>
         <input type="text" id="cs-account" placeholder="例：you@example.com">
@@ -1764,9 +1764,16 @@ function syncGoogle(manual){
 }
 function openCalSync(){
   const g=id=>document.getElementById(id);
-  g('cs-mode').value=syncCfg.mode; g('cs-url').value=syncCfg.url; g('cs-proxy').value=syncCfg.proxy||'';
+  const mode=(syncCfg.mode==='ical')?'ical':'gas';      // 既定はGAS方式
+  syncCfg.mode=mode;
+  g('cs-mode').value=mode; g('cs-url').value=syncCfg.url||''; g('cs-proxy').value=syncCfg.proxy||'';
   g('cs-auto').value=syncCfg.auto?'1':'0'; g('cs-min').value=syncCfg.min||15;
-  g('cs-note').textContent=syncCfg.err?('前回エラー：'+syncCfg.err):'設定はこのブラウザに保存されます。';
+  const ac=g('cs-account'); if(ac)ac.value=(syncCfg.account)||ME_ACCOUNT||'';
+  const w=document.getElementById('cs-proxy-wrap'); if(w)w.style.display=(mode==='ical')?'':'none';
+  const u=g('cs-url'); if(u)u.placeholder=(mode==='ical')
+    ?'https://calendar.google.com/calendar/ical/..../basic.ics'
+    :'https://script.google.com/macros/s/xxxx/exec';
+  g('cs-note').textContent=syncCfg.err?('前回エラー：'+syncCfg.err):'設定はこのブラウザに保存されます。GAS方式を推奨します。';
   document.getElementById('calsync').showModal();
 }
 document.addEventListener('click',ev=>{
