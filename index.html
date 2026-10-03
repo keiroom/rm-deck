@@ -1715,13 +1715,20 @@ function applyGcal(list){
 function jsonpGet(url,cb,err){
   const name='__calcb'+Math.floor(Math.random()*1e9);
   const s=document.createElement('script');
-  const done=(fn,arg)=>{try{delete window[name];}catch(e){window[name]=undefined;}
-    s.remove();fn(arg);};
+  let settled=false;
+  const domHint=url.indexOf('/a/macros/')>=0
+    ?'\n\n※このURLは社内ドメイン限定の形式（/a/macros/）です。ブラウザが社内アカウントでログインしていないと応答しません。'
+    :'';
+  const done=(fn,arg)=>{if(settled)return;settled=true;
+    try{delete window[name];}catch(e){window[name]=undefined;}
+    try{s.remove();}catch(e){}fn(arg);};
   window[name]=data=>done(cb,data);
-  s.onerror=()=>done(err,new Error('読み込み失敗（URLまたは公開設定を確認してください）'));
+  s.onerror=()=>done(err,new Error('読み込み失敗（URLまたは公開設定を確認してください）'+domHint));
+  s.onload=()=>{setTimeout(()=>{if(!settled)done(err,new Error(
+    '応答がJSONではありません（ログインページ等が返っています）。デプロイの「アクセスできるユーザー」を確認してください'+domHint));},1500);};
   s.src=url+(url.indexOf('?')<0?'?':'&')+'callback='+name;
   document.head.appendChild(s);
-  setTimeout(()=>{if(window[name])done(err,new Error('タイムアウト（20秒）'));},20000);
+  setTimeout(()=>{if(!settled)done(err,new Error('タイムアウト（60秒）'+domHint));},60000);
 }
 function syncGoogle(manual){
   if(!syncCfg.url){if(manual){openCalSync();}return;}
@@ -1740,7 +1747,10 @@ function syncGoogle(manual){
     const s=document.getElementById('cal-sync-st');
     if(s){s.className='syncst ng';s.textContent='同期エラー';s.title=syncCfg.err;}
     if(manual)alert('同期できませんでした：\n'+syncCfg.err
-      +'\n\n・GAS方式：URL末尾が /exec か、アクセス「全員」でデプロイしたか確認\n・iCal方式：CORSプロキシの設定を確認');
+      +'\n\n・GAS方式：URL末尾が /exec か、アクセス「全員」でデプロイしたか確認'
+      +'\n・社内アカウントでログインしているか確認（/a/macros/ のURLは要ログイン）'
+      +'\n・初回はGASが起動に時間がかかります。もう一度お試しください'
+      +'\n・iCal方式：CORSプロキシの設定を確認');
   };
   if(syncCfg.mode==='ical'){
     const u=syncCfg.proxy?(syncCfg.proxy+encodeURIComponent(syncCfg.url)):syncCfg.url;
