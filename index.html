@@ -353,6 +353,24 @@ dialog input::placeholder,dialog textarea::placeholder{color:#6B7E9E}
 dialog select option{background:var(--panel);color:var(--ink)}
 dialog input:focus,dialog select:focus,dialog textarea:focus{outline:0;border-color:var(--cyan);box-shadow:0 0 0 1px rgba(34,225,255,.35)}
 dialog .formgrid>div{margin-bottom:2px}
+
+/* FC paste import */
+.impbox{border:1px solid var(--line2);background:var(--panel2);padding:12px;margin-bottom:14px}
+.impbox h3{font-family:var(--fx);font-size:12px;letter-spacing:.12em;color:var(--cyan);margin:0 0 8px}
+.impbox textarea{width:100%;min-height:112px;background:var(--void);border:1px solid var(--line);
+  color:var(--ink);font-family:var(--fm);font-size:11.5px;padding:8px;line-height:1.6}
+.impbox textarea::placeholder{color:#5E7290}
+.improw{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0}
+.improw select{background:var(--void);border:1px solid var(--line);color:var(--ink);font-family:var(--fm);font-size:12px;padding:6px 8px}
+.impmsg{font-family:var(--fm);font-size:11.5px;margin-top:8px;line-height:1.7}
+.impmsg.ok{color:var(--green)} .impmsg.bad{color:var(--red)}
+.impbox table{width:100%;border-collapse:collapse;font-family:var(--fm);font-size:11px;margin-top:8px}
+.impbox th,.impbox td{border:1px solid var(--line);padding:4px 6px;text-align:right;white-space:nowrap}
+.impbox th:first-child,.impbox td:first-child{text-align:left}
+.impbox thead th{background:var(--raise);color:var(--muted);font-weight:500}
+
+.budbox{border:1px solid var(--line2);background:var(--panel2);padding:12px;margin-bottom:14px}
+.budbox h3{font-family:var(--fx);font-size:12px;letter-spacing:.12em;color:var(--cyan);margin:0 0 8px}
 </style>
 </head>
 <body>
@@ -1170,7 +1188,7 @@ function renderFcDeck(){
           <td class="num" style="${r.fullDiff==null?'color:var(--dim)':(r.fullDiff<0?'color:var(--red)':'color:var(--green)')}">${r.fullDiff==null?'—':fm(r.fullDiff)}</td>
           <td class="num" style="${r.fullRate==null?'color:var(--dim)':(r.fullRate>=1?'color:var(--green)':'color:var(--amber)')}">${r.fullRate==null?'—':pc(r.fullRate)}</td></tr>`).join('')}
       </tbody></table>
-      <div class="hint" style="margin-top:8px">予算ADR＝予算室料÷予算ROOM／FC ADR＝FC室料÷FC ROOM／室料差＝FC−予算。全館は「付帯FC見込」を予算マスタに入力すると算出されます。</div>
+      <div class="hint" style="margin-top:8px">ADR＝客室平均単価＝室料売上÷販売室数（円・端数なし）。予算ADR＝予算室料÷予算ROOM／FC ADR＝FC室料÷FC ROOM／室料差＝FC−予算。OCC＝販売室数÷販売可能室数。全館は予算マスタの付帯FC見込で算出されます。</div>
     </div>
     <div class="charts" style="margin-top:16px">
       <div class="chart"><h3>室料FC vs 予算（万円）</h3>${svgGrouped(rows,'rev','bMan','#FF4FD8','#4C8DFF')}
@@ -2303,6 +2321,244 @@ document.querySelectorAll('nav.tabs button[data-tab]').forEach(b=>b.addEventList
   const g=document.getElementById('bk-drive');if(g)g.addEventListener('click',bkDriveSend);
   const f=document.getElementById('bk-refresh');if(f)f.addEventListener('click',bkDriveList);
   const c=document.getElementById('bk-cfg');if(c)c.addEventListener('click',()=>{try{openCalSync();}catch(e){}});
+})();
+
+/*FCIMPORT-BEGIN*/
+const FCIMP_MONRE=/^(\d{4})[-\/](\d{1,2})$/;
+function fcimpS(v){return String(v==null?'':v).replace(/^\s+|\s+$/g,'').replace(/^"|"$/g,'');}
+function fcimpNum(v){const s=fcimpS(v).replace(/[,¥\\s円%]/g,'');if(s==='')return null;const n=+s;return isFinite(n)?n:null;}
+function fcimpDate(v){const m=fcimpS(v).match(/(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);return m?m[1]+'-'+('0'+m[2]).slice(-2)+'-'+('0'+m[3]).slice(-2):'';}
+function fcimpMetric(v){const s=fcimpS(v).toUpperCase();
+  if(/ROOM|室数/.test(s))return 'room';
+  if(/REVPAR/.test(s))return 'revpar';
+  if(/ADR|単価/.test(s))return 'adr';
+  if(/REV|室料|売上/.test(s))return 'rev';
+  return '';}
+/* 貼り付けた表を解析 → {groups:[{date,method,months:{ym:{room,revY,revMan,adr}}}],months:[...],warn,err} */
+function fcParsePaste(text){
+  const lines=String(text||'').replace(/\r/g,'').split('\n').filter(l=>l.trim()!=='');
+  if(!lines.length)return {err:'入力が空です'};
+  const delim=lines.some(l=>l.indexOf('\t')>=0)?'\t':',';
+  const rows=lines.map(l=>l.split(delim).map(fcimpS));
+  let head=-1,mcols={};
+  rows.forEach((cells,i)=>{const f={};
+    cells.forEach((c,j)=>{const m=c.match(FCIMP_MONRE);if(m)f[j]=m[1]+'-'+('0'+m[2]).slice(-2);});
+    if(head<0&&Object.keys(f).length>=2){head=i;mcols=f;}});
+  const findCol=(re,def)=>{if(head>=0)for(let j=0;j<rows[head].length;j++)if(re.test(rows[head][j]))return j;return def;};
+  const cDate=findCol(/基準|日付|date/i,0), cMeth=findCol(/算定|方法|method|版/i,1), cMet=findCol(/指標|metric/i,2);
+  const body=rows.slice(head<0?0:head+1);
+  if(!body.length)return {err:'データ行が見つかりません'};
+  let warn='';
+  const map={};                                   // ym -> col
+  const ks=Object.keys(mcols).map(Number).sort((a,b)=>a-b);
+  if(ks.length){ks.forEach(j=>{map[mcols[j]]=j;});}
+  else{const start=Math.max(cDate,cMeth,cMet)+1;
+    FC_MONTHS.forEach((ym,i)=>{map[ym]=start+i;});
+    warn='見出しの月（例 2026-10）が無かったため、列順から推定しました。';}
+  const months=Object.keys(map);
+  const groups={},order=[];
+  let lastDate='',lastMeth='';
+  body.forEach(cells=>{
+    if(cells.length<=cMet)return;
+    let dt=fcimpDate(cells[cDate]); if(dt)lastDate=dt;
+    let mt=fcimpS(cells[cMeth]); if(mt)lastMeth=mt;
+    const metric=fcimpMetric(cells[cMet]);
+    if(!metric)return;
+    if(!lastDate)return;
+    const key=lastDate+'|'+lastMeth;
+    if(!groups[key]){groups[key]={date:lastDate,method:lastMeth,months:{}};order.push(key);}
+    months.forEach(ym=>{
+      const raw=cells[map[ym]]; if(raw===undefined||fcimpS(raw)==='')return;
+      const v=fcimpNum(raw); if(v==null)return;
+      const o=groups[key].months[ym]||(groups[key].months[ym]={});
+      o[metric]=v;
+    });
+  });
+  if(!order.length)return {err:'ROOM/ADR/Revenue/RevPAR の行を認識できませんでした'};
+  const out=order.map(k=>{
+    const g=groups[k],ms={};
+    Object.keys(g.months).forEach(ym=>{
+      const o=g.months[ym];
+      let room=o.room, revY=o.rev, adr=o.adr;
+      if(revY==null&&room!=null&&adr!=null)revY=room*adr;
+      if(room==null&&revY!=null&&adr)room=Math.round(revY/adr);
+      if(adr==null&&revY!=null&&room)adr=revY/room;
+      if(room==null&&revY==null)return;
+      ms[ym]={room:(room==null?null:room),rev:(revY==null?null:revY/10000),adr:adr,revY:revY};
+    });
+    return {date:g.date,method:g.method,months:ms,count:Object.keys(ms).length};
+  });
+  return {groups:out,months:months,warn:warn};
+}
+/*FCIMPORT-END*/
+
+function fcImpMount(){
+  const host=document.getElementById('fc-input'); if(!host)return;
+  if(document.getElementById('fc-imp'))return;
+  const box=document.createElement('div');
+  box.id='fc-imp'; box.className='impbox';
+  box.innerHTML='<h3>▌ 貼り付け取込（Excel・AIの表をそのまま貼る）</h3>'
+    +'<textarea id="fc-imp-text" placeholder="基準日\t算定方法\t指標\t2026-10\t2026-11\t…\t備考&#10;2026-10-04\tChatGPT／従来法・日別上限補正\tROOM\t2789\t2555\t…&#10;…\tADR\t17325\t…&#10;…\tRevenue\t48319939\t…&#10;…\tRevPAR\t12989\t…" spellcheck="false"></textarea>'
+    +'<div class="improw">'
+    +'<label class="hint" for="fc-imp-kind">区分</label>'
+    +'<select id="fc-imp-kind">'+KINDS.map(k=>'<option'+(k===(fcSel.kind||'現実ライン')?' selected':'')+'>'+esc(k)+'</option>').join('')+'</select>'
+    +'<button class="btn" id="fc-imp-prev">プレビュー</button>'
+    +'<button class="btn primary" id="fc-imp-run">取込む</button>'
+    +'<button class="btn" id="fc-imp-clear">クリア</button>'
+    +'<label class="btn" for="fc-imp-file">ファイル選択</label>'
+    +'<input type="file" id="fc-imp-file" accept=".csv,.tsv,.txt" hidden>'
+    +'<span class="hint">Excelからはセル範囲をコピーしてそのまま貼り付け（タブ区切り）。Revenueは円で自動的に万円へ換算します。ADR/RevPARは自動計算。</span>'
+    +'</div><div id="fc-imp-out"></div>';
+  host.insertBefore(box,host.firstChild);
+}
+function fcImpShow(res,run){
+  const out=document.getElementById('fc-imp-out'); if(!out)return;
+  if(res.err){out.innerHTML='<div class="impmsg bad">取込できません：'+esc(res.err)+'</div>';return;}
+  const sell=m=>num(fcBudget(m).sellable);
+  let html='';
+  if(res.warn)html+='<div class="impmsg" style="color:var(--amber)">'+esc(res.warn)+'</div>';
+  res.groups.forEach(g=>{
+    const ms=Object.keys(g.months);
+    html+='<div style="margin-top:10px"><span class="hint">基準日 <b style="color:var(--cyan)">'+esc(g.date)+'</b> ／ 区分 <b>'+esc(document.getElementById('fc-imp-kind').value)+'</b> ／ 算定版 '+esc(g.method||'—')+'（'+ms.length+'ヶ月）</span>'
+      +'<table><thead><tr><th>対象月</th><th>ROOM</th><th>ADR 円</th><th>Revenue 円</th><th>室料 万円</th><th>RevPAR 円</th></tr></thead><tbody>'
+      +ms.map(ym=>{const o=g.months[ym];const sv=sell(ym);
+        return '<tr><td>'+esc(mlabelY(ym))+'</td><td>'+(o.room==null?'—':fm(o.room))+'</td><td>'+(o.adr==null?'—':fm(o.adr))
+          +'</td><td>'+(o.revY==null?'—':fm(o.revY))+'</td><td>'+(o.rev==null?'—':fm(o.rev))+'</td>'
+          +'<td>'+((sv&&o.revY)?fm(o.revY/sv):'—')+'</td></tr>';}).join('')
+      +'</tbody></table></div>';
+  });
+  html+='<div class="impmsg '+(run?'ok':'')+'">'+res.groups.length+'件・延べ'+res.groups.reduce((p,g)=>p+g.count,0)+'ヶ月を解析しました'+(run?'':'（「取込む」で登録します）')+'</div>';
+  out.innerHTML=html;
+}
+function fcImpParseOnly(){const ta=document.getElementById('fc-imp-text');return fcParsePaste(ta?ta.value:'');}
+function fcImpRun(){
+  const res=fcImpParseOnly();
+  if(res.err){fcImpShow(res,false);return;}
+  const kind=document.getElementById('fc-imp-kind').value||'現実ライン';
+  const ents=state.fc.entries||(state.fc.entries=[]);
+  let added=0,updated=0;
+  res.groups.forEach(g=>{
+    let e=ents.find(x=>x.date===g.date&&x.kind===kind);
+    if(!e){e={id:nid('fc',ents),date:g.date,kind:kind,months:{}};ents.push(e);added++;}
+    else updated++;
+    if(g.method)e.version=g.method;
+    Object.keys(g.months).forEach(ym=>{e.months[ym]={room:g.months[ym].room,rev:g.months[ym].rev};});
+  });
+  ents.sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+  const last=res.groups[res.groups.length-1];
+  fcSel.kind=kind; fcSel.date=last.date;
+  save();
+  fcImpShow(res,true);
+  const out=document.getElementById('fc-imp-out');
+  if(out)out.insertAdjacentHTML('afterbegin','<div class="impmsg ok">登録しました：新規'+added+'件／更新'+updated+'件。FC-02（ダッシュボード）に反映されています。</div>');
+  renderFc();
+}
+document.addEventListener('click',ev=>{
+  const t=ev.target.closest&&ev.target.closest('#fc-imp-prev,#fc-imp-run,#fc-imp-clear');
+  if(!t)return;
+  if(t.id==='fc-imp-prev'){const r=fcImpParseOnly();fcImpShow(r,false);}
+  if(t.id==='fc-imp-clear'){const ta=document.getElementById('fc-imp-text');if(ta)ta.value='';const o=document.getElementById('fc-imp-out');if(o)o.innerHTML='';}
+  if(t.id==='fc-imp-run'){fcImpRun();}
+});
+document.addEventListener('change',ev=>{
+  if(ev.target.id!=='fc-imp-file')return;
+  const f=ev.target.files&&ev.target.files[0]; if(!f)return;
+  const r=new FileReader();
+  r.onload=()=>{const ta=document.getElementById('fc-imp-text');if(ta){ta.value=String(r.result||'');fcImpShow(fcImpParseOnly(),false);}};
+  r.readAsText(f);
+});
+(function(){ if(window.__fcImpInstalled)return; window.__fcImpInstalled=1;
+  const orig=window.renderFcInput;
+  window.renderFcInput=function(){ if(orig)orig.apply(this,arguments); try{fcImpMount();}catch(e){} };
+  try{fcImpMount();}catch(e){}   // 初回描画時にも設置
+})();
+
+/*BUDGET-MERGE-BEGIN*/
+function budParse(json){
+  let o=json;
+  if(o&&o.data&&o.data.fc)o=o.data;
+  if(o&&o.fc&&o.fc.budget)o=o.fc.budget;
+  else if(o&&o.budget)o=o.budget;
+  if(!Array.isArray(o))throw new Error('予算の配列が見つかりません（形式をご確認ください）');
+  return o;
+}
+function budMerge(list){
+  state.fc=state.fc||{}; state.fc.budget=state.fc.budget||[];
+  const F=['budget_room','room_budget','sellable','fb','park','other','total','ancillary'];
+  let add=0,upd=0;
+  list.forEach(it=>{
+    if(!it||!it.month)return;
+    let row=state.fc.budget.find(b=>b.month===it.month);
+    if(!row){row={month:it.month};state.fc.budget.push(row);add++;}
+    let ch=false;
+    F.forEach(k=>{if(it[k]!==undefined&&it[k]!==null){row[k]=it[k];ch=true;}});
+    if(ch&&row!==null&&add===0)upd++;
+  });
+  state.fc.budget.sort((a,b)=>String(a.month).localeCompare(String(b.month)));
+  return {add:add,upd:upd,total:state.fc.budget.length};
+}
+/* 室料が「円」のまま(万円欄に円を入力)の行を万円へ補正 */
+function fixRevUnits(){
+  const es=(state.fc&&state.fc.entries)||[]; const hit=[];
+  es.forEach(e=>{Object.keys(e.months||{}).forEach(m=>{
+    const o=e.months[m];
+    if(o&&typeof o.rev==='number'&&o.rev>=100000){o.rev=o.rev/10000;hit.push(e.date+' '+m);}
+  });});
+  return hit;
+}
+/*BUDGET-MERGE-END*/
+
+function budMount(){
+  const host=document.getElementById('fc-master'); if(!host)return;
+  if(document.getElementById('bud-imp'))return;
+  const box=document.createElement('div');
+  box.id='bud-imp'; box.className='budbox';
+  box.innerHTML='<h3>▌ 予算の一括取込（決定予算）</h3>'
+    +'<div class="improw">'
+    +'<label class="btn primary" for="bud-file">📥 予算ファイルを取込</label>'
+    +'<input type="file" id="bud-file" accept=".json" hidden>'
+    +'<button class="btn" id="bud-fix">🔧 室料の単位を補正（円→万円）</button>'
+    +'<span class="fc-save-st" id="bud-st">—</span>'
+    +'</div>'
+    +'<div class="hint">取り込むのは<b>予算マスタだけ</b>です。タスク・アクション・FC予測・カレンダーはそのまま残ります（月ごとに一致する行だけ更新）。</div>'
+    +'<div id="bud-out"></div>';
+  host.insertBefore(box,host.firstChild);
+}
+function budStatus(t,cls){const e=document.getElementById('bud-st');if(e){e.textContent=t;e.style.color=(cls==='bad')?'var(--red)':((cls==='ok')?'var(--green)':'');}}
+document.addEventListener('change',ev=>{
+  if(ev.target.id!=='bud-file')return;
+  const f=ev.target.files&&ev.target.files[0]; if(!f)return;
+  const r=new FileReader();
+  r.onload=()=>{
+    const out=document.getElementById('bud-out');
+    try{
+      const list=budParse(JSON.parse(r.result));
+      const res=budMerge(list);
+      save(); renderFc();
+      const chk=FC_MONTHS.map(m=>{const b=fcBudget(m);const s=num(b.sellable);const rv=num(b.room_budget);
+        return '<tr><td>'+esc(mlabelY(m))+'</td><td>'+(b.budget_room==null?'—':fm(b.budget_room))+'</td><td>'
+          +(rv==null?'—':fm(rv/10000))+'</td><td>'+(s==null?'—':fm(s))+'</td></tr>';}).join('');
+      out.innerHTML='<div class="impmsg ok">予算を取込みました：追加'+res.add+'件／更新'+res.upd+'件（全'+res.total+'ヶ月）。</div>'
+        +'<table><thead><tr><th>対象月</th><th>予算ROOM</th><th>室料予算 万円</th><th>販売可能室数</th></tr></thead><tbody>'+chk+'</tbody></table>'
+        +'<div class="hint" style="margin-top:6px">FC-02のOCC・RevPAR・予算差が、この販売可能室数を使って計算されます。</div>';
+      budStatus('取込完了','ok');
+    }catch(e){out.innerHTML='<div class="impmsg bad">取込できません：'+esc((e&&e.message)||String(e))+'</div>';budStatus('取込失敗','bad');}
+  };
+  r.readAsText(f);
+});
+document.addEventListener('click',ev=>{
+  const t=ev.target.closest&&ev.target.closest('#bud-fix'); if(!t)return;
+  const hit=fixRevUnits();
+  if(!hit.length){budStatus('補正の必要はありません','ok');const o=document.getElementById('bud-out');if(o)o.innerHTML='<div class="impmsg">室料の単位に異常は見つかりませんでした。</div>';return;}
+  save(); renderFc();
+  budStatus(hit.length+'件を補正','ok');
+  const o=document.getElementById('bud-out');
+  if(o)o.innerHTML='<div class="impmsg ok">室料を万円に補正しました（'+hit.length+'件）：'+esc(hit.join(' / '))+'</div>';
+});
+(function(){ if(window.__budInstalled)return; window.__budInstalled=1;
+  const orig=window.renderFcMaster;
+  window.renderFcMaster=function(){ if(orig)orig.apply(this,arguments); try{budMount();}catch(e){} };
+  try{budMount();}catch(e){}
 })();
 </script>
 <script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"4edd5f8ec12a48cfa682ab8261b80a79","spa":2}' crossorigin="anonymous"></script>
