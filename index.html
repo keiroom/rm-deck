@@ -381,6 +381,7 @@ tbody tr:hover{background:linear-gradient(90deg,rgba(43,227,255,.08),rgba(43,227
     <button role="tab" aria-selected="false" data-tab="acts"><span class="no">MODULE 03</span><span class="nm">ACTION PLAN</span></button>
     <button role="tab" aria-selected="false" data-tab="fc"><span class="no">MODULE 04</span><span class="nm">FC FORECAST</span></button>
     <button role="tab" aria-selected="false" data-tab="cal"><span class="no">MODULE 05</span><span class="nm">CALENDAR</span></button>
+    <button role="tab" aria-selected="false" data-tab="backup"><span class="no">MODULE 06</span><span class="nm">BACKUP</span></button>
   </nav>
 
   <!-- ================= DASHBOARD ================= -->
@@ -510,6 +511,20 @@ tbody tr:hover{background:linear-gradient(90deg,rgba(43,227,255,.08),rgba(43,227
     </div>
   </section>
 
+    <section id="view-backup" hidden>
+    <div class="phead"><h2><b>▌</b> BACKUP / RESTORE</h2><span class="sub">内包しているデータを丸ごと保存・復元</span></div>
+    <div class="kpis" id="bk-kpis" style="grid-template-columns:repeat(4,minmax(0,1fr))"></div>
+    <div class="toolbar" style="margin-top:14px">
+      <button class="btn sav" id="bk-download">⬇ ファイルに保存（JSON）</button>
+      <button class="btn primary" id="bk-drive">☁ Google Driveへ保存</button>
+      <button class="btn" id="bk-restore">↥ バックアップから復元</button>
+      <button class="btn" id="bk-refresh">⟳ Drive一覧を更新</button>
+      <span class="fc-save-st" id="bk-status">待機中</span>
+    </div>
+    <div class="hint" style="margin:10px 0">保存対象：タスク／アクションプラン／FC予算／FC予測値／確定実績／カレンダー予定／同期設定。<b>Driveへ保存</b>はカレンダー同期設定のURL（Google Apps Script）経由で、指定フォルダへ直接書き込みます。</div>
+    <div class="phead" style="margin-top:18px"><h2><b>▌</b> DRIVE上のバックアップ</h2><span class="sub" id="bk-sub">—</span></div>
+    <div class="tablewrap" id="bk-list"></div>
+  </section>
   <div class="foot">ACJ RM CONTROL DECK ／ MODULES 05 + FC-05 ／ DATA STORED IN THIS BROWSER (localStorage)</div>
 </div>
 
@@ -2150,6 +2165,92 @@ setInterval(()=>{if(syncCfg.url&&syncCfg.auto&&document.visibilityState!=='hidde
   el.value=(syncCfg&&syncCfg.account)||'';
   el.addEventListener('input',function(e){syncCfg=syncCfg||{};syncCfg.account=e.target.value.trim();saveSync();ME_ACCOUNT=syncCfg.account;try{render();}catch(_){}});
 }catch(e){}})();
+
+/* ---------- MODULE 06: BACKUP ---------- */
+function bkStatus(t,cls){const e=document.getElementById('bk-status');if(e){e.textContent=t;e.style.color=(cls==='bad')?'var(--red)':((cls==='ok')?'var(--green)':'');}}
+function bkCounts(){
+  const f=state.fc||{};
+  const calN=(state.gcal&&state.gcal.length)?state.gcal.length:((state.cal&&state.cal.length)?state.cal.length:0);
+  return [['タスク',(state.tasks||[]).length],['アクション',(state.actions||[]).length],
+    ['FC予算',(f.budget||[]).length],['FC予測値',(f.entries||[]).length],
+    ['確定実績',(f.actuals||[]).length],['カレンダー予定',calN],
+    ['ローカル予定',(state.calLocal||[]).length],['最終更新',new Date().toLocaleString('ja-JP')]];
+}
+function bkPayload(){return {action:'backup',at:new Date().toISOString(),data:state};}
+function bkDownload(){
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([JSON.stringify(state,null,1)],{type:'application/json'}));
+  a.download='ACJ_backup_'+today()+'.json';a.click();
+  bkStatus('ファイルを保存しました','ok');
+}
+function bkRestore(){
+  const i=document.createElement('input');i.type='file';i.accept='.json';
+  i.onchange=()=>{const f=i.files[0];if(!f)return;const r=new FileReader();
+    r.onload=()=>{try{let s=JSON.parse(r.result);
+      if(s&&s.data&&s.data.tasks)s=s.data;                       // Drive形式にも対応
+      if(!s||!s.tasks||!s.actions)throw 0;
+      state=s;save();render();renderBackup();bkStatus('復元しました','ok');
+    }catch(e){bkStatus('読み込めないファイルです','bad');}};
+    r.readAsText(f);};
+  i.click();
+}
+function bkDriveSend(){
+  if(!syncCfg||!syncCfg.url){bkStatus('先にカレンダーの「⚙ 同期設定」でURLを保存してください','bad');return;}
+  bkStatus('送信中...');
+  const body=JSON.stringify(bkPayload());
+  fetch(syncCfg.url,{method:'POST',mode:'no-cors',
+    headers:{'Content-Type':'text/plain;charset=utf-8'},body:body})
+   .then(()=>{bkStatus('送信しました。Driveを確認中...');setTimeout(bkDriveList,2500);})
+   .catch(e=>bkStatus('送信エラー：'+(e&&e.message||e),'bad'));
+}
+function bkDriveList(){
+  if(!syncCfg||!syncCfg.url){
+    document.getElementById('bk-sub').textContent='同期URL未設定';
+    document.getElementById('bk-list').innerHTML='<div class="hint" style="padding:12px">カレンダーの「⚙ 同期設定」でURLを保存すると、Drive上のバックアップ一覧が表示されます。</div>';
+    return;
+  }
+  const cb='acjBk_'+Date.now();
+  const done=r=>{
+    const sub=document.getElementById('bk-sub'),wrap=document.getElementById('bk-list');
+    try{
+      if(!r||!r.ok)throw 0;
+      const bs=r.backups||[];
+      sub.textContent=(bs.length?bs.length+'件':'0件')+'（フォルダ内）';
+      if(!bs.length){wrap.innerHTML='<div class="hint" style="padding:12px">まだバックアップがありません。「☁ Google Driveへ保存」を押してください。</div>';return;}
+      wrap.innerHTML='<table style="min-width:640px"><thead><tr><th style="width:260px">ファイル名</th><th class="num" style="width:170px">更新日時</th><th class="num" style="width:100px">サイズ</th><th>操作</th></tr></thead><tbody>'
+        +bs.map(b=>'<tr><td class="ttl">'+esc(b.name)+'</td><td class="num">'+esc(new Date(b.at).toLocaleString('ja-JP'))+'</td><td class="num">'+fm(Math.round((b.size||0)/1024))+' KB</td><td><a class="btn" href="'+esc(b.url)+'" target="_blank" rel="noopener">開く</a></td></tr>').join('')
+        +'</tbody></table>';
+      bkStatus('Drive一覧を取得しました','ok');
+    }catch(e){
+      document.getElementById('bk-sub').textContent='取得に失敗';
+      document.getElementById('bk-list').innerHTML='<div class="hint" style="padding:12px">Drive一覧を取得できませんでした（同期URLとアクセス権をご確認ください）。</div>';
+      bkStatus('Drive一覧の取得に失敗','bad');
+    }finally{try{delete window[cb];}catch(e){}}
+  };
+  window[cb]=done;
+  const s=document.createElement('script');
+  s.src=syncCfg.url+(syncCfg.url.indexOf('?')<0?'?':'&')+'action=backups&callback='+cb+'&_='+Date.now();
+  s.onerror=()=>{document.getElementById('bk-sub').textContent='取得に失敗';bkStatus('Drive一覧の取得に失敗','bad');};
+  document.body.appendChild(s);
+}
+function renderBackup(){
+  const el=document.getElementById('bk-kpis');
+  if(el)el.innerHTML=bkCounts().map(([k,v])=>'<div class="kpi"><div class="k">'+esc(k)+'</div><div class="v">'+esc(String(v))+'</div></div>').join('');
+  bkStatus((syncCfg&&syncCfg.url)?'準備完了':'同期設定URLが未設定です（Drive保存には設定が必要）');
+  bkDriveList();
+}
+document.querySelectorAll('nav.tabs button[data-tab]').forEach(b=>b.addEventListener('click',()=>{
+  if(b.dataset.tab!=='backup'){const v=document.getElementById('view-backup');if(v)v.setAttribute('hidden','');return;}
+  document.querySelectorAll('section[id^="view-"]').forEach(s=>s.setAttribute('hidden',''));
+  const v=document.getElementById('view-backup');if(v)v.removeAttribute('hidden');
+  renderBackup();
+}));
+(function(){try{renderBackup();}catch(e){}
+  const d=document.getElementById('bk-download');if(d)d.addEventListener('click',bkDownload);
+  const r=document.getElementById('bk-restore');if(r)d&&r.addEventListener('click',bkRestore);
+  const g=document.getElementById('bk-drive');if(g)g.addEventListener('click',bkDriveSend);
+  const f=document.getElementById('bk-refresh');if(f)f.addEventListener('click',bkDriveList);
+})();
 </script>
 <script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"4edd5f8ec12a48cfa682ab8261b80a79","spa":2}' crossorigin="anonymous"></script>
 </body>
