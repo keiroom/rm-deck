@@ -3,7 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ACJ // RM CONTROL DECK</title>
+<title>ACJ RM DECK</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2064%2064%27%3E%3Crect%20width%3D%2764%27%20height%3D%2764%27%20rx%3D%2713%27%20fill%3D%27%230E1626%27%2F%3E%3Crect%20x%3D%2711%27%20y%3D%2736%27%20width%3D%2710%27%20height%3D%2717%27%20rx%3D%272%27%20fill%3D%27%2322E1FF%27%2F%3E%3Crect%20x%3D%2727%27%20y%3D%2722%27%20width%3D%2710%27%20height%3D%2731%27%20rx%3D%272%27%20fill%3D%27%234C8DFF%27%2F%3E%3Crect%20x%3D%2743%27%20y%3D%2729%27%20width%3D%2710%27%20height%3D%2724%27%20rx%3D%272%27%20fill%3D%27%23FF4FD8%27%2F%3E%3Crect%20x%3D%2711%27%20y%3D%2712%27%20width%3D%2742%27%20height%3D%274%27%20rx%3D%272%27%20fill%3D%27%232BE8A5%27%2F%3E%3C%2Fsvg%3E">
+<meta name="theme-color" content="#0E1626">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
@@ -1733,8 +1735,16 @@ function jsonpGet(url,cb,err){
 function syncGoogle(manual){
   if(!syncCfg.url){if(manual){openCalSync();}return;}
   const el=document.getElementById('cal-sync-st');
-  if(el){el.className='syncst idle';el.innerHTML='<span class="spin">⟳</span> 同期中…';}
+  if(!manual&&syncCfg.last&&(Date.now()-new Date(syncCfg.last).getTime())<5*60000){return;}  // 直近5分はスキップ
+  const t0=Date.now();
+  const stopTick=()=>{if(window.__synctick){clearInterval(window.__synctick);window.__synctick=0;}};
+  stopTick();
+  const paint=()=>{if(!el)return;const s=Math.round((Date.now()-t0)/1000);
+    el.className='syncst idle';
+    el.innerHTML='<span class="spin">⟳</span> 同期中… '+s+'秒'+(s>=8?'（初回は時間がかかります）':'');};
+  paint(); window.__synctick=setInterval(paint,1000);
   const ok=res=>{
+    stopTick();
     const ev=(res&&res.events)||[];
     if(!ev.length&&res&&res.ok===false){throw new Error(res.error||'取得失敗');}
     applyGcal(ev);
@@ -1743,6 +1753,7 @@ function syncGoogle(manual){
     if(manual)alert('同期完了：'+ev.length+'件を取得しました');
   };
   const ng=e=>{
+    stopTick();
     syncCfg.err=(e&&e.message)||String(e);saveSync();
     const s=document.getElementById('cal-sync-st');
     if(s){s.className='syncst ng';s.textContent='同期エラー';s.title=syncCfg.err;}
@@ -1759,7 +1770,8 @@ function syncGoogle(manual){
         ok({ok:true,events:out.map(e=>({d:e.d,t:e.t||'',et:'',ed:e.ed||'',s:e.s||'(無題)',l:e.l||'',ad:e.ad?1:0,id:e.id||'',org:'',me:'',att:[],n:0,desc:e.desc||''}))});})
       .catch(ng);
   }else{
-    jsonpGet(syncCfg.url,res=>{try{ok(res);}catch(e){ng(e);}},ng);
+    const sep=syncCfg.url.indexOf('?')<0?'?':'&';
+    jsonpGet(syncCfg.url+sep+'nocache='+(manual?'1':'0'),res=>{try{ok(res);}catch(e){ng(e);}},ng);
   }
 }
 function openCalSync(){
@@ -2243,7 +2255,9 @@ function bkDriveList(){
   const done=r=>{
     const sub=document.getElementById('bk-sub'),wrap=document.getElementById('bk-list');
     try{
-      if(!r||!r.ok)throw 0;
+      if(!r)throw new Error('応答がありません（JSONPが実行されませんでした）');
+      if(r.ok===false)throw new Error('GASエラー：'+(r.error||'不明なエラー'));
+      if(!('backups' in r))throw new Error('GASが旧バージョンの可能性があります（backupsが返りません）');
       const bs=r.backups||[];
       sub.textContent=(bs.length?bs.length+'件':'0件')+'（フォルダ内）';
       if(!bs.length){wrap.innerHTML='<div class="hint" style="padding:12px">まだバックアップがありません。「☁ Google Driveへ保存」を押してください。</div>';return;}
@@ -2252,8 +2266,13 @@ function bkDriveList(){
         +'</tbody></table>';
       bkStatus('Drive一覧を取得しました','ok');
     }catch(e){
+      const msg=(e&&e.message)||String(e);
       document.getElementById('bk-sub').textContent='取得に失敗';
-      document.getElementById('bk-list').innerHTML='<div class="hint" style="padding:12px">Drive一覧を取得できませんでした（同期URLとアクセス権をご確認ください）。</div>';
+      document.getElementById('bk-list').innerHTML='<div style="padding:12px;color:var(--red);font-family:var(--fm);font-size:12px;line-height:1.7">Drive一覧を取得できませんでした。<br>理由：'+esc(msg)
+        +'<br><br><span style="color:var(--ink)">確認手順</span><br>'
+        +'1. Apps Script のエディタで関数 <b>listBackups</b> を選び「実行」→ 権限を承認（Drive権限が未承認だと失敗します）<br>'
+        +'2. Code.gs を <b>gas_sync.gs</b> に差し替え、「デプロイを管理 → 新バージョン」で再デプロイ<br>'
+        +'3. この画面を <b>Ctrl + F5</b> で再読み込み</div>';
       bkStatus('Drive一覧の取得に失敗','bad');
     }finally{try{delete window[cb];}catch(e){}}
   };
@@ -2261,6 +2280,7 @@ function bkDriveList(){
   const s=document.createElement('script');
   s.src=syncCfg.url+(syncCfg.url.indexOf('?')<0?'?':'&')+'action=backups&callback='+cb+'&_='+Date.now();
   s.onerror=()=>{document.getElementById('bk-sub').textContent='取得に失敗';bkStatus('Drive一覧の取得に失敗','bad');};
+  s.onload=()=>{setTimeout(()=>{if(window[cb])done({ok:false,error:'応答がJSONではありません（Drive権限の未承認、またはデプロイ設定の問題）'});},1200);};
   document.body.appendChild(s);
 }
 function renderBackup(){
