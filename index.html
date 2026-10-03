@@ -626,7 +626,9 @@ const STATUS=['未着手','進行中','効果検証','完了'];
 const STCLS={'未着手':'st-new','進行中':'st-prog','効果検証':'st-check','完了':'st-done'};
 const COL={'未着手':'#3A5480','進行中':'#FFC400','効果検証':'#00C4E0','完了':'#3E4C63'};
 
-function iso(d){return d.toISOString().slice(0,10);}
+function iso(d){                       // ローカル日付で YYYY-MM-DD を作る（UTC変換は日付がずれる）
+  const y=d.getFullYear(),m=d.getMonth()+1,day=d.getDate();
+  return y+'-'+(m<10?'0':'')+m+'-'+(day<10?'0':'')+day;}
 function today(){const d=new Date();return iso(new Date(d.getFullYear(),d.getMonth(),d.getDate()));}
 function parse(s){if(!s)return null;const [y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d);}
 function addDays(s,n){const d=parse(s);d.setDate(d.getDate()+n);return iso(d);}
