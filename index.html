@@ -1668,7 +1668,6 @@ const SYNC_KEY='acj_rm_cal_sync_v1';
 function loadSync(){try{const r=localStorage.getItem(SYNC_KEY);if(r){const o=JSON.parse(r);return o;}}catch(e){}
   return {mode:'gas',url:'',proxy:'',auto:true,min:15,last:'',count:0,err:''};}
 let syncCfg=loadSync();
-ME_ACCOUNT=(syncCfg&&(syncCfg.account||syncCfg.email))||'';
 function saveSync(){try{localStorage.setItem(SYNC_KEY,JSON.stringify(syncCfg));}catch(e){}}
 function syncLabel(){
   const el=document.getElementById('cal-sync-st'); if(!el)return;
@@ -1771,7 +1770,7 @@ function calLocal(){if(!state.calLocal)state.calLocal=[];return state.calLocal;}
 function b64u(str){return btoa(unescape(encodeURIComponent(str))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');}
 function gcalEventURL(e){return 'https://calendar.google.com/calendar/u/0/r/eventedit/'+b64u((e.id||'')+' '+ME_ACCOUNT);}
 function gcalDayURL(ds){const d=parse(ds);return 'https://calendar.google.com/calendar/u/0/r/day/'+d.getFullYear()+'/'+(d.getMonth()+1)+'/'+d.getDate();}
-let ME_ACCOUNT='';
+let ME_ACCOUNT=(syncCfg&&(syncCfg.account||syncCfg.email))||'';
 const RSVP_JP={accepted:'参加',declined:'不参加',tentative:'未定',needsAction:'未回答'};
 
 function calEventsAll(){return calEvents().concat(calLocal());}
