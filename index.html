@@ -995,17 +995,17 @@ function renderFcInput(){
     return `<tr>
       <td class="ttl">${esc(mlabelY(m))}</td>
       <td class="num"><input class="fcin" data-m="${m}" data-k="room" type="number" min="0" value="${room===null?'':room}"></td>
-      <td class="num"><input class="fcin" data-m="${m}" data-k="rev" type="number" min="0" step="0.1" value="${rev===null?'':rev}"></td>
+      <td class="num"><input class="fcin" data-m="${m}" data-k="rev" type="number" min="0" step="1" value="${rev===null?'':Math.round(rev*10000)}"></td>
       <td class="num">${adr===null?'—':fm(adr)}</td>
       <td class="num">${occ===null?'—':pc(occ)}</td>
       <td class="num">${revpar===null?'—':fm(revpar)}</td>
-      <td class="num hint">${b.room_budget?fm(b.room_budget/10000):'未入力'}</td>
-      <td class="num">${(rev!==null&&b.room_budget)?fm(rev-b.room_budget/10000):'—'}</td>
+      <td class="num hint">${b.room_budget?fm(b.room_budget):'未入力'}</td>
+      <td class="num">${(rev!==null&&b.room_budget)?fm(Math.round(rev*10000-b.room_budget)):'—'}</td>
     </tr>`;}).join('');
   const sum=fcSummary(fcSnapshot(d.date,d.kind));
   const draftRows=FC_MONTHS.map(m=>{const v=d.months[m]||{};const b=fcBudget(m);
     const rev=num(v.rev),bMan=num(b.room_budget)?num(b.room_budget)/10000:null;
-    return {rev,bMan,room:num(v.room),fullDiff:null,errRate:null,fullRate:null,bTotal:num(b.total)};});
+    return {rev,bRev:bMan,bMan,room:num(v.room),fullDiff:null,errRate:null,fullRate:null,bTotal:num(b.total)};});
   const ds=fcSummary(draftRows);
   const existing=fcFind(d.date,d.kind);
   document.getElementById('fc-input').innerHTML=`
@@ -1018,21 +1018,21 @@ function renderFcInput(){
       <button class="btn" data-csv="fcinput">CSV出力</button>
       <button class="btn" id="fi-clear">クリア</button>
       ${existing?'<button class="btn danger" id="fi-del">この基準日の記録を削除</button>':''}
-      <span class="hint">ROOM＝室数／室料＝万円。ADR・OCC・RevPARは自動計算です。</span>
+      <span class="hint">ROOM＝室数／室料＝円。ADR・OCC・RevPARは自動計算です。</span>
     </div>
     <div class="tablewrap" style="max-height:none">
       <table style="min-width:940px"><thead><tr>
         <th style="width:110px">対象月</th><th class="num" style="width:120px">FC ROOM</th>
-        <th class="num" style="width:140px">FC室料（万円）</th><th class="num" style="width:110px">ADR 円</th>
+        <th class="num" style="width:140px">FC室料 円</th><th class="num" style="width:110px">ADR 円</th>
         <th class="num" style="width:90px">OCC</th><th class="num" style="width:120px">RevPAR 円</th>
-        <th class="num" style="width:120px">予算 万円</th><th class="num" style="width:120px">予算差 万円</th>
+        <th class="num" style="width:120px">予算 円</th><th class="num" style="width:120px">予算差 円</th>
       </tr></thead><tbody>${rows}</tbody>
       <tfoot><tr style="background:var(--panel2)">
         <td class="ttl" id="fcf-months">合計（${ds.months}ヶ月入力）</td><td class="num" id="fcf-room">${fm(ds.sumRoom)}</td>
-        <td class="num" id="fcf-rev" style="color:var(--cyan);font-weight:600">${fm(ds.sumRev)}</td>
+        <td class="num" id="fcf-rev" style="color:var(--cyan);font-weight:600">${fm(Math.round(ds.sumRev*10000))}</td>
         <td colspan="3" class="hint" id="fcf-ratio">予算比 ${pc(ds.ratio)}</td>
-        <td class="num" id="fcf-bud">${fm(ds.sumB)}</td>
-        <td class="num" id="fcf-diff">${ds.sumB?fm(ds.sumRev-ds.sumB):'—'}</td>
+        <td class="num" id="fcf-bud">${fm(Math.round(ds.sumB*10000))}</td>
+        <td class="num" id="fcf-diff">${ds.sumB?fm(Math.round((ds.sumRev-ds.sumB)*10000)):'—'}</td>
       </tr></tfoot></table>
     </div>
     <div class="hint" style="margin-top:10px">記録済み：${fcEntries().length} 件　／　同じ「基準日＋区分」で再保存すると上書きされます。</div>
@@ -1043,11 +1043,11 @@ function renderFcInput(){
   document.getElementById('fi-list').innerHTML=fcEntries().length?`
     <div class="tablewrap" style="max-height:340px"><table style="min-width:760px"><thead><tr>
       <th style="width:110px">基準日</th><th style="width:130px">算定版</th><th style="width:120px">区分</th>
-      <th class="num" style="width:140px">室料FC合計 万円</th><th class="num" style="width:100px">対象月数</th><th style="width:150px"></th>
+      <th class="num" style="width:140px">室料FC合計 円</th><th class="num" style="width:100px">対象月数</th><th style="width:150px"></th>
     </tr></thead><tbody>${[...fcEntries()].sort((a,b)=>b.date.localeCompare(a.date)).map(e=>{
       const s=fcSummary(fcSnapshot(e.date,e.kind));
       return `<tr><td class="num">${esc(fmtMD(e.date))}</td><td class="hint">${esc(e.version||'—')}</td>
-        <td class="hint">${esc(e.kind)}</td><td class="num" style="color:var(--cyan)">${fm(s.sumRev)}</td>
+        <td class="hint">${esc(e.kind)}</td><td class="num" style="color:var(--cyan)">${fm(Math.round(s.sumRev*10000))}</td>
         <td class="num">${s.months}</td>
         <td><div class="rowbtns"><button class="iconbtn" data-fcload="${esc(e.date)}|${esc(e.kind)}">読込</button>
         <button class="iconbtn del" data-fcdel="${esc(e.date)}|${esc(e.kind)}">削除</button></div></td></tr>`;}).join('')}
@@ -1063,15 +1063,15 @@ function updateFcFoot(){
   const sumB=withFc.filter(r=>r.bMan!==null).reduce((p,r)=>p+r.bMan,0);
   const set=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
   set('fcf-months','合計（'+withFc.length+'ヶ月入力）');
-  set('fcf-room',fm(sumRoom)); set('fcf-rev',fm(sumRev));
+  set('fcf-room',fm(sumRoom)); set('fcf-rev',fm(Math.round(sumRev*10000)));
   set('fcf-ratio','予算比 '+(sumB?pc(sumRev/sumB):'—'));
-  set('fcf-bud',fm(sumB)); set('fcf-diff',sumB?fm(sumRev-sumB):'—');
+  set('fcf-bud',fm(Math.round(sumB*10000))); set('fcf-diff',sumB?fm(Math.round((sumRev-sumB)*10000)):'—');
 }
 document.addEventListener('input',ev=>{
   if(!ev.target.classList.contains('fcin')||!fcDraft)return;
   const m=ev.target.dataset.m,k=ev.target.dataset.k;
   fcDraft.months[m]=fcDraft.months[m]||{};
-  fcDraft.months[m][k]=ev.target.value===''?null:+ev.target.value;
+  const _raw=ev.target.value; fcDraft.months[m][k]=_raw===''?null:(k==='rev'?+_raw/10000:+_raw);
   const tr=ev.target.closest('tr'); if(!tr)return;
   const tds=tr.querySelectorAll('td'); if(tds.length<8)return;
   const b=fcBudget(m), v=fcDraft.months[m];
@@ -1079,7 +1079,7 @@ document.addEventListener('input',ev=>{
   tds[3].textContent=(room&&rev)?fm(rev*10000/room):'—';
   tds[4].textContent=(room&&sellable)?pc(room/sellable):'—';
   tds[5].textContent=(rev&&sellable)?fm(rev*10000/sellable):'—';
-  tds[7].textContent=(rev!==null&&b.room_budget)?fm(rev-b.room_budget/10000):'—';
+  tds[7].textContent=(rev!==null&&b.room_budget)?fm(Math.round(rev*10000-b.room_budget)):'—';
   updateFcFoot();
 });
 document.addEventListener('change',ev=>{
@@ -1140,8 +1140,8 @@ function renderFcDeck(){
   const s=fcSummary(rows);
   const has=fcAnyEntry();
   const kpis=[
-    ['予算室料 万円',s.sumB?fm(s.sumB):'未入力',''],
-    ['FC室料 万円',fm(s.sumRev),''],
+    ['予算室料 円',s.sumB?fm(Math.round(s.sumB*10000)):'未入力',''],
+    ['FC室料 円',fm(Math.round(s.sumRev*10000)),''],
     ['室料予算比',pc(s.ratio),s.ratio&&s.ratio>=1?'good':'warn'],
     ['予算ROOM',s.sumBRoom?fm(s.sumBRoom):'未入力',''],
     ['FC ROOM',fm(s.sumRoom),''],
@@ -1166,22 +1166,22 @@ function renderFcDeck(){
     <div style="margin-top:16px" class="tablewrap">
       <table style="min-width:1580px"><thead><tr>
         <th style="width:84px">対象月</th>
-        <th class="num">予算ROOM</th><th class="num">予算ADR 円</th><th class="num">予算室料 万円</th>
-        <th class="num">FC ROOM</th><th class="num">FC ADR 円</th><th class="num">FC室料 万円</th>
-        <th class="num">ROOM差</th><th class="num">ADR差 円</th><th class="num">室料差 万円</th>
+        <th class="num">予算ROOM</th><th class="num">予算ADR 円</th><th class="num">予算室料 円</th>
+        <th class="num">FC ROOM</th><th class="num">FC ADR 円</th><th class="num">FC室料 円</th>
+        <th class="num">ROOM差</th><th class="num">ADR差 円</th><th class="num">室料差 円</th>
         <th class="num">予算比</th><th class="num">OCC</th><th class="num">RevPAR 円</th>
         <th class="num">全館予算差 万円</th><th class="num">全館達成率</th></tr></thead><tbody>
         ${rows.map(r=>`<tr>
           <td class="ttl">${esc(mlabelY(r.month))}</td>
           <td class="num">${r.bRoom==null?'—':fm(r.bRoom)}</td>
           <td class="num">${r.bAdr==null?'—':fm(r.bAdr)}</td>
-          <td class="num">${r.bRev==null?'—':fm(r.bRev)}</td>
+          <td class="num">${r.bRev==null?'—':fm(Math.round(r.bRev*10000))}</td>
           <td class="num">${r.room==null?'—':fm(r.room)}</td>
           <td class="num">${r.adr==null?'—':fm(r.adr)}</td>
-          <td class="num" style="color:var(--cyan);font-weight:600">${r.rev==null?'—':fm(r.rev)}</td>
+          <td class="num" style="color:var(--cyan);font-weight:600">${r.rev==null?'—':fm(Math.round(r.rev*10000))}</td>
           <td class="num" style="${r.roomDiff==null?'':(r.roomDiff<0?'color:var(--red)':'color:var(--green)')}">${r.roomDiff==null?'—':(r.roomDiff>0?'+':'')+fm(r.roomDiff)}</td>
           <td class="num" style="${r.adrDiff==null?'':(r.adrDiff<0?'color:var(--red)':'color:var(--green)')}">${r.adrDiff==null?'—':(r.adrDiff>0?'+':'')+fm(r.adrDiff)}</td>
-          <td class="num" style="${r.revDiff==null?'':(r.revDiff<0?'color:var(--red)':'color:var(--green)')}">${r.revDiff==null?'—':(r.revDiff>0?'+':'')+fm(r.revDiff)}</td>
+          <td class="num" style="${r.revDiff==null?'':(r.revDiff<0?'color:var(--red)':'color:var(--green)')}">${r.revDiff==null?'—':(r.revDiff>0?'+':'')+fm(Math.round(r.revDiff*10000))}</td>
           <td class="num" style="color:${r.ratio==null?'inherit':(r.ratio>=1?'var(--green)':'var(--amber)')}">${r.ratio==null?'—':pc(r.ratio)}</td>
           <td class="num" style="${r.occ!=null&&r.occ<0.8?'color:var(--orange)':''}">${r.occ==null?'—':pc(r.occ)}</td>
           <td class="num">${r.revpar==null?'—':fm(r.revpar)}</td>
@@ -1223,20 +1223,20 @@ function renderFcAcc(){
     </div>
     <div class="toolbar" style="margin:12px 0"><button class="btn" data-csv="fcacc">CSV出力</button><span class="hint">誤差＝FC−実績。±3%以内＝◎高精度／±7%以内＝○許容／それ以上＝△要修正。</span></div>
     <div class="tablewrap"><table style="min-width:1240px"><thead><tr>
-      <th style="width:88px">対象月</th><th class="num">FC ROOM</th><th class="num">FC ADR 円</th><th class="num">FC室料 万円</th>
-      <th class="num">実績ROOM</th><th class="num">実績ADR 円</th><th class="num">実績室料 万円</th>
-      <th class="num">誤差 万円</th><th class="num">誤差率</th><th style="width:110px">判定</th></tr></thead><tbody>
+      <th style="width:88px">対象月</th><th class="num">FC ROOM</th><th class="num">FC ADR 円</th><th class="num">FC室料 円</th>
+      <th class="num">実績ROOM</th><th class="num">実績ADR 円</th><th class="num">実績室料 円</th>
+      <th class="num">誤差 円</th><th class="num">誤差率</th><th style="width:110px">判定</th></tr></thead><tbody>
       ${rows.map(r=>{
         const j=r.errRate==null?'—':(Math.abs(r.errRate)<=0.03?'◎ 高精度':(Math.abs(r.errRate)<=0.07?'○ 許容':'△ 要修正'));
         const c=r.errRate==null?'inherit':(Math.abs(r.errRate)<=0.03?'var(--green)':(Math.abs(r.errRate)<=0.07?'var(--amber)':'var(--red)'));
         return `<tr><td class="ttl">${esc(mlabelY(r.month))}</td>
         <td class="num">${r.room==null?'—':fm(r.room)}</td>
         <td class="num">${r.adr==null?'—':fm(r.adr)}</td>
-        <td class="num">${r.rev==null?'—':fm(r.rev)}</td>
+        <td class="num">${r.rev==null?'—':fm(Math.round(r.rev*10000))}</td>
         <td class="num">${r.aRoom==null?'—':fm(r.aRoom)}</td>
         <td class="num">${r.aAdr==null?'—':fm(r.aAdr)}</td>
-        <td class="num">${r.aRev==null?'—':fm(r.aRev/10000)}</td>
-        <td class="num">${r.err==null?'—':fm(r.err)}</td>
+        <td class="num">${r.aRev==null?'—':fm(Math.round(r.aRev))}</td>
+        <td class="num">${r.err==null?'—':fm(Math.round(r.err*10000))}</td>
         <td class="num" style="color:${c};font-weight:600">${r.errRate==null?'—':pc(r.errRate)}</td>
         <td style="color:${c};font-weight:600">${j}</td></tr>`;}).join('')}
     </tbody></table></div>
@@ -1244,11 +1244,11 @@ function renderFcAcc(){
     <div class="chart"><h3>室料FC合計の推移（万円）</h3>${svgTrendBig()}</div>
     <div class="tablewrap" style="margin-top:14px"><table style="min-width:800px"><thead><tr>
       <th style="width:110px">基準日</th><th style="width:130px">算定版</th><th style="width:130px">区分</th>
-      <th class="num">室料FC合計 万円</th><th class="num">対象月数</th><th class="num">前回比 万円</th></tr></thead><tbody>
+      <th class="num">室料FC合計 円</th><th class="num">対象月数</th><th class="num">前回比 円</th></tr></thead><tbody>
       ${trend.map((t,i)=>{const prev=trend[i+1];const d=prev?t.sum-prev.sum:null;
         return `<tr><td class="num">${esc(fmtMD(t.date))}</td><td class="hint">${esc(t.version||'—')}</td>
-        <td class="hint">${esc(t.kind)}</td><td class="num" style="color:var(--green);font-weight:600">${fm(t.sum)}</td>
-        <td class="num">${t.months}</td><td class="num">${d===null?'—':fm(d)}</td></tr>`;}).join('')}
+        <td class="hint">${esc(t.kind)}</td><td class="num" style="color:var(--green);font-weight:600">${fm(Math.round(t.sum*10000))}</td>
+        <td class="num">${t.months}</td><td class="num">${d===null?'—':fm(Math.round(d*10000))}</td></tr>`;}).join('')}
     </tbody></table></div>`;
 }
 function svgTrendBig(){
@@ -1267,7 +1267,7 @@ function renderFcMaster(){
     <td class="ttl">${esc(mlabelY(m))}</td>
     <td class="num"><input class="fcm" data-t="budget" data-m="${m}" data-k="budget_room" type="number" min="0" value="${b.budget_room!=null?b.budget_room:''}" placeholder="—"></td>
     <td class="num" data-c="bAdr" style="color:var(--blue)">${adr==null?'—':fm(adr)}</td>
-    <td class="num"><input class="fcm" data-t="budget" data-m="${m}" data-k="room_budget" type="number" min="0" step="1" value="${b.room_budget!=null?Math.round(b.room_budget/10000):''}" placeholder="—"></td>
+    <td class="num"><input class="fcm" data-t="budget" data-m="${m}" data-k="room_budget" type="number" min="0" step="1" value="${b.room_budget!=null?Math.round(b.room_budget):''}" placeholder="—"></td>
     <td class="num"><input class="fcm" data-t="budget" data-m="${m}" data-k="sellable" type="number" min="0" value="${b.sellable!=null?b.sellable:''}" placeholder="—"></td>
     <td class="num"><input class="fcm" data-t="budget" data-m="${m}" data-k="total" type="number" min="0" step="1" value="${b.total!=null?Math.round(b.total/10000):''}" placeholder="—"></td>
     <td class="num"><input class="fcm" data-t="budget" data-m="${m}" data-k="ancillary" type="number" min="0" step="1" value="${b.ancillary!=null?Math.round(b.ancillary/10000):''}" placeholder="—"></td>
@@ -1279,25 +1279,25 @@ function renderFcMaster(){
     <td class="ttl">${esc(mlabelY(m))}</td>
     <td class="num"><input class="fcm" data-t="actuals" data-m="${m}" data-k="room" type="number" min="0" value="${a.room!=null?a.room:''}" placeholder="—"></td>
     <td class="num" data-c="xAdr" style="color:var(--green)">${adr==null?'—':fm(adr)}</td>
-    <td class="num"><input class="fcm" data-t="actuals" data-m="${m}" data-k="rev" type="number" min="0" step="1" value="${a.rev!=null?Math.round(a.rev/10000):''}" placeholder="—"></td>
+    <td class="num"><input class="fcm" data-t="actuals" data-m="${m}" data-k="rev" type="number" min="0" step="1" value="${a.rev!=null?Math.round(a.rev):''}" placeholder="—"></td>
     <td class="num"><input class="fcm" data-t="actuals" data-m="${m}" data-k="fb" type="number" min="0" step="1" value="${a.fb!=null?Math.round(a.fb/10000):''}" placeholder="—"></td>
     <td class="num"><input class="fcm" data-t="actuals" data-m="${m}" data-k="park" type="number" min="0" step="1" value="${a.park!=null?Math.round(a.park/10000):''}" placeholder="—"></td>
     <td class="num"><input class="fcm" data-t="actuals" data-m="${m}" data-k="other" type="number" min="0" step="1" value="${a.other!=null?Math.round(a.other/10000):''}" placeholder="—"></td>
     <td class="hint" data-c="aSt">${a.rev?'確定':'未確定'}</td></tr>`;}).join('');
   document.getElementById('fc-master').innerHTML=`
-    <div class="toolbar"><button class="btn sav" data-fcsave="master">💾 保存</button><button class="btn" data-csv="fcmaster">CSV出力</button><span class="fc-save-st" data-st="master">未保存なし</span><span class="hint">予算と確定実績を管理します。ROOM＝室数／室料＝万円／ADRは入力と同時に自動計算。予算は2027-03以降が未入力です。</span></div>
-    <div class="phead" style="margin-top:14px"><h2><b>▌</b> 予算マスタ</h2><span class="sub">予算ROOM → 予算ADR（自動）→ 予算室料（万円）</span></div>
+    <div class="toolbar"><button class="btn sav" data-fcsave="master">💾 保存</button><button class="btn" data-csv="fcmaster">CSV出力</button><span class="fc-save-st" data-st="master">未保存なし</span><span class="hint">予算と確定実績を管理します。ROOM＝室数／室料＝円／ADRは入力と同時に自動計算。予算は2027-03以降が未入力です。</span></div>
+    <div class="phead" style="margin-top:14px"><h2><b>▌</b> 予算マスタ</h2><span class="sub">予算ROOM → 予算ADR（自動）→ 予算室料（円）</span></div>
     <div class="tablewrap"><table style="min-width:980px"><thead><tr>
-      <th style="width:86px">対象月</th><th class="num">予算ROOM</th><th class="num">予算ADR 円<br><span class="hint">自動計算</span></th><th class="num">予算室料 万円</th>
+      <th style="width:86px">対象月</th><th class="num">予算ROOM</th><th class="num">予算ADR 円<br><span class="hint">自動計算</span></th><th class="num">予算室料 円</th>
       <th class="num">販売可能室数</th><th class="num">全館予算 万円</th><th class="num">付帯FC<br>見込 万円</th><th>状態</th>
     </tr></thead><tbody>${bud}</tbody></table></div>
-    <div class="phead" style="margin-top:20px"><h2><b>▌</b> 確定実績</h2><span class="sub">実績ROOM → 実績ADR（自動）→ 実績室料（万円）</span></div>
+    <div class="phead" style="margin-top:20px"><h2><b>▌</b> 確定実績</h2><span class="sub">実績ROOM → 実績ADR（自動）→ 実績室料（円）</span></div>
     <div class="tablewrap"><table style="min-width:980px"><thead><tr>
-      <th style="width:86px">対象月</th><th class="num">実績ROOM</th><th class="num">実績ADR 円<br><span class="hint">自動計算</span></th><th class="num">実績室料 万円</th>
+      <th style="width:86px">対象月</th><th class="num">実績ROOM</th><th class="num">実績ADR 円<br><span class="hint">自動計算</span></th><th class="num">実績室料 円</th>
       <th class="num">実績FB 万円</th><th class="num">実績駐車場 万円</th><th class="num">実績その他 万円</th><th>状態</th>
     </tr></thead><tbody>${act}</tbody></table></div>`;
 }
-const FC_MAN={room_budget:1,total:1,ancillary:1,rev:1,fb:1,park:1,other:1};
+const FC_MAN={total:1,ancillary:1,fb:1,park:1,other:1};
 document.addEventListener('input',ev=>{
   if(!ev.target.classList.contains('fcm'))return;
   const {t,m,k}=ev.target.dataset;
@@ -1368,19 +1368,19 @@ function csvFor(type){
   }
   if(type==='fcinput'){
     const d=fcDraft||{months:{}};
-    csvDownload('ACJ_FC_input_'+D+'.csv',['対象月','FC ROOM','FC室料 万円','ADR 円','OCC','RevPAR 円','予算 万円','予算差 万円'],
+    csvDownload('ACJ_FC_input_'+D+'.csv',['対象月','FC ROOM','FC室料 円','ADR 円','OCC','RevPAR 円','予算 円','予算差 円'],
       FC_MONTHS.map(m=>{const v=d.months[m]||{};const b=fcBudget(m);const room=num(v.room),rev=num(v.rev),sellable=num(b.sellable);
-        return [mlabelY(m),room==null?'':room,rev==null?'':rev,(room&&rev)?Math.round(rev*10000/room):'',(room&&sellable)?(room/sellable*100).toFixed(1)+'%':'',(rev&&sellable)?Math.round(rev*10000/sellable):'',b.room_budget?Math.round(b.room_budget/10000):'',(rev!=null&&b.room_budget)?(rev-b.room_budget/10000).toFixed(1):''];}));
+        return [mlabelY(m),room==null?'':room,rev==null?'':Math.round(rev*10000),(room&&rev)?Math.round(rev*10000/room):'',(room&&sellable)?(room/sellable*100).toFixed(1)+'%':'',(rev&&sellable)?Math.round(rev*10000/sellable):'',b.room_budget?Math.round(b.room_budget):'',(rev!=null&&b.room_budget)?Math.round(rev*10000-b.room_budget):''];}));
     return;
   }
   if(type==='fcdeck'){
     if(!fcEntries().length)return;
     const rows=fcSnapshot(fcSel.date,fcSel.kind);
     csvDownload('ACJ_FC_dashboard_'+fcSel.date+'_'+fcSel.kind+'.csv',
-      ['対象月','予算ROOM','予算ADR 円','予算室料 万円','FC ROOM','FC ADR 円','FC室料 万円','ROOM差','ADR差 円','室料差 万円','予算比','OCC','RevPAR 円','全館予算差 万円','全館達成率'],
-      rows.map(r=>[mlabelY(r.month),r.bRoom==null?'':r.bRoom,r.bAdr==null?'':Math.round(r.bAdr),r.bRev==null?'':r.bRev.toFixed(1),
-        r.room==null?'':r.room,r.adr==null?'':Math.round(r.adr),r.rev==null?'':r.rev.toFixed(1),
-        r.roomDiff==null?'':r.roomDiff,r.adrDiff==null?'':Math.round(r.adrDiff),r.revDiff==null?'':r.revDiff.toFixed(1),
+      ['対象月','予算ROOM','予算ADR 円','予算室料 円','FC ROOM','FC ADR 円','FC室料 円','ROOM差','ADR差 円','室料差 円','予算比','OCC','RevPAR 円','全館予算差 万円','全館達成率'],
+      rows.map(r=>[mlabelY(r.month),r.bRoom==null?'':r.bRoom,r.bAdr==null?'':Math.round(r.bAdr),r.bRev==null?'':Math.round(r.bRev*10000),
+        r.room==null?'':r.room,r.adr==null?'':Math.round(r.adr),r.rev==null?'':Math.round(r.rev*10000),
+        r.roomDiff==null?'':r.roomDiff,r.adrDiff==null?'':Math.round(r.adrDiff),r.revDiff==null?'':Math.round(r.revDiff*10000),
         r.ratio==null?'':(r.ratio*100).toFixed(1)+'%',r.occ==null?'':(r.occ*100).toFixed(1)+'%',
         r.revpar==null?'':Math.round(r.revpar),r.fullDiff==null?'':r.fullDiff.toFixed(1),
         r.fullRate==null?'':(r.fullRate*100).toFixed(1)+'%']));
@@ -1389,9 +1389,9 @@ function csvFor(type){
   if(type==='fcacc'){
     const rows=fcSnapshot(fcSel.date,fcSel.kind);
     csvDownload('ACJ_FC_accuracy_'+fcSel.date+'_'+fcSel.kind+'.csv',
-      ['対象月','FC室料 万円','実績室料 万円','誤差 万円','誤差率','FC ROOM','実績ROOM','ROOM誤差','FC ADR 円','実績ADR 円','ADR誤差 円','判定'],
+      ['対象月','FC室料 円','実績室料 円','誤差 円','誤差率','FC ROOM','実績ROOM','ROOM誤差','FC ADR 円','実績ADR 円','ADR誤差 円','判定'],
       rows.map(r=>{const j=r.errRate==null?'—':(Math.abs(r.errRate)<=0.03?'◎ 高精度':(Math.abs(r.errRate)<=0.07?'○ 許容':'△ 要修正'));
-        return [mlabelY(r.month),r.rev==null?'':r.rev.toFixed(1),r.aRev==null?'':(r.aRev/10000).toFixed(1),r.err==null?'':r.err.toFixed(1),
+        return [mlabelY(r.month),r.rev==null?'':Math.round(r.rev*10000),r.aRev==null?'':Math.round(r.aRev),r.err==null?'':Math.round(r.err*10000),
         r.errRate==null?'':(r.errRate*100).toFixed(1)+'%',r.room==null?'':r.room,r.aRoom==null?'':r.aRoom,
         r.aRoomDiff==null?'':r.aRoomDiff,r.adr==null?'':Math.round(r.adr),r.aAdr==null?'':Math.round(r.aAdr),
         r.aAdrDiff==null?'':Math.round(r.aAdrDiff),j];}));
@@ -1412,13 +1412,13 @@ function csvFor(type){
   }
   if(type==='fcactual'){
     const snap=fcEntries().length?fcSnapshot(fcSel.date,fcSel.kind):[];
-    csvDownload('ACJ_FC_actual_'+D+'.csv',['対象月','実績ROOM','実績ADR 円','実績室料 円','実績室料 万円','FC室料 万円','誤差 万円','誤差率','判定'],
+    csvDownload('ACJ_FC_actual_'+D+'.csv',['対象月','実績ROOM','実績ADR 円','実績室料 円','FC室料 円','誤差 円','誤差率','判定'],
       FC_MONTHS.map(m=>{const a=fcActual(m);const s=snap.find(x=>x.month===m)||{};const aRev=num(a.rev);const aMan=aRev==null?'':aRev/10000;
         const fc=num(s.rev);const err=(fc!=null&&aMan!=='')?fc-aMan:null;const rate=(err!=null&&aMan)?err/aMan:null;
         const j=rate==null?'—':(Math.abs(rate)<=0.03?'◎ 高精度':(Math.abs(rate)<=0.07?'○ 許容':'△ 要修正'));
         const ar2=num(a.room);
-        return [mlabelY(m),a.room==null?'':a.room,(ar2&&aRev)?Math.round(aRev/ar2):'',aRev==null?'':aRev,aMan===''?'':aMan.toFixed(1),fc==null?'':fc.toFixed(1),
-        err==null?'':err.toFixed(1),rate==null?'':(rate*100).toFixed(1)+'%',j];}));
+        return [mlabelY(m),a.room==null?'':a.room,(ar2&&aRev)?Math.round(aRev/ar2):'',aRev==null?'':Math.round(aRev),fc==null?'':Math.round(fc*10000),
+        err==null?'':Math.round(err*10000),rate==null?'':(rate*100).toFixed(1)+'%',j];}));
     return;
   }
   if(type==='fcmaster'){
@@ -1460,9 +1460,9 @@ function renderFcActual(){
       <td class="ttl">${esc(mlabelY(m))}</td>
       <td class="num"><input class="fca" data-m="${m}" data-k="room" type="number" min="0" value="${a.room!=null?a.room:''}" placeholder="—"></td>
       <td class="num" data-c="aAdr">${(num(a.room)&&aRev!=null)?fm(aRev/num(a.room)):'—'}</td>
-      <td class="num"><input class="fca" data-m="${m}" data-k="rev" type="number" min="0" step="1" value="${a.rev!=null?Math.round(a.rev/10000):''}" placeholder="—"></td>
-      <td class="num hint">${fc==null?'—':fm(fc)}</td>
-      <td class="num ${cls}" data-c="err">${err==null?'—':fm(err)}</td>
+      <td class="num"><input class="fca" data-m="${m}" data-k="rev" type="number" min="0" step="1" value="${a.rev!=null?Math.round(a.rev):''}" placeholder="—"></td>
+      <td class="num hint">${fc==null?'—':fm(Math.round(fc*10000))}</td>
+      <td class="num ${cls}" data-c="err">${err==null?'—':fm(Math.round(err*10000))}</td>
       <td class="num ${cls}" data-c="rate">${rate==null?'—':pc(rate)}</td>
       <td class="${cls}" data-c="judge">${j}</td></tr>`;}).join('');
   document.getElementById('fc-actual').innerHTML=`
@@ -1480,11 +1480,11 @@ function renderFcActual(){
       <div class="kpi"><div class="k">実績入力済み月</div><div class="v" id="fa-kpi-done">${done.length}</div></div>
       <div class="kpi good"><div class="k">高精度月（±3%以内）</div><div class="v" id="fa-kpi-hit">${hit}</div></div>
     </div>
-    <div class="hint" style="margin:12px 0">実績ROOMと実績室料（万円）を入力すると、実績ADR・誤差・誤差率・判定が入力と同時に自動計算されます。誤差＝FC室料−実績室料。±3%以内＝◎／±7%以内＝○／それ以上＝△。</div>
+    <div class="hint" style="margin:12px 0">実績ROOMと実績室料（円）を入力すると、実績ADR・誤差・誤差率・判定が入力と同時に自動計算されます。誤差＝FC室料−実績室料。±3%以内＝◎／±7%以内＝○／それ以上＝△。</div>
     <div class="tablewrap" style="max-height:none"><table style="min-width:930px"><thead><tr>
-      <th style="width:86px">対象月</th><th class="num" style="width:106px">実績ROOM</th><th class="num" style="width:116px">実績ADR 円<br><span class="hint">自動</span></th><th class="num" style="width:124px">実績室料 万円</th>
-      <th class="num" style="width:110px">FC室料 万円</th>
-      <th class="num" style="width:106px">誤差 万円</th><th class="num" style="width:86px">誤差率</th><th style="width:100px">判定</th>
+      <th style="width:86px">対象月</th><th class="num" style="width:106px">実績ROOM</th><th class="num" style="width:116px">実績ADR 円<br><span class="hint">自動</span></th><th class="num" style="width:124px">実績室料 円</th>
+      <th class="num" style="width:110px">FC室料 円</th>
+      <th class="num" style="width:106px">誤差 円</th><th class="num" style="width:86px">誤差率</th><th style="width:100px">判定</th>
     </tr></thead><tbody>${body}</tbody></table></div>
     <div class="hint" style="margin-top:10px">※ FC-04「予算・実績マスタ」の確定実績と同じデータを参照・同期します。</div>`;
 }
@@ -1494,7 +1494,7 @@ document.addEventListener('input',ev=>{
   const arr=state.fc.actuals; let row=arr.find(x=>x.month===m);
   if(!row){row={month:m};arr.push(row);}
   const raw=ev.target.value;
-  row[k]=raw===''?null:(k==='rev'?(+raw)*10000:+raw);
+  row[k]=raw===''?null:+raw;
   const tr=ev.target.closest('tr'); if(tr){
     const aRev=num(row.rev),aMan=aRev==null?null:aRev/10000;
     const snap=fcEntries().length?fcSnapshot(fcSel.date,fcSel.kind).find(x=>x.month===m)||{}:{};
@@ -1503,7 +1503,7 @@ document.addEventListener('input',ev=>{
     const j=rate==null?'—':(Math.abs(rate)<=0.03?'◎ 高精度':(Math.abs(rate)<=0.07?'○ 許容':'△ 要修正'));
     const cell=k=>tr.querySelector('[data-c="'+k+'"]');
     const cAdr=cell('aAdr'); if(cAdr)cAdr.textContent=(num(row.room)&&aRev!=null)?fm(aRev/num(row.room)):'—';
-    const cErr=cell('err'); if(cErr){cErr.textContent=err==null?'—':fm(err);cErr.className='num '+cls;}
+    const cErr=cell('err'); if(cErr){cErr.textContent=err==null?'—':fm(Math.round(err*10000));cErr.className='num '+cls;}
     const cRate=cell('rate'); if(cRate){cRate.textContent=rate==null?'—':pc(rate);cRate.className='num '+cls;}
     const cJ=cell('judge'); if(cJ){cJ.textContent=j;cJ.className=cls;}}
   refreshFcActualKpis();
@@ -2537,9 +2537,9 @@ document.addEventListener('change',ev=>{
       save(); renderFc();
       const chk=FC_MONTHS.map(m=>{const b=fcBudget(m);const s=num(b.sellable);const rv=num(b.room_budget);
         return '<tr><td>'+esc(mlabelY(m))+'</td><td>'+(b.budget_room==null?'—':fm(b.budget_room))+'</td><td>'
-          +(rv==null?'—':fm(rv/10000))+'</td><td>'+(s==null?'—':fm(s))+'</td></tr>';}).join('');
+          +(rv==null?'—':fm(Math.round(rv)))+'</td><td>'+(s==null?'—':fm(s))+'</td></tr>';}).join('');
       out.innerHTML='<div class="impmsg ok">予算を取込みました：追加'+res.add+'件／更新'+res.upd+'件（全'+res.total+'ヶ月）。</div>'
-        +'<table><thead><tr><th>対象月</th><th>予算ROOM</th><th>室料予算 万円</th><th>販売可能室数</th></tr></thead><tbody>'+chk+'</tbody></table>'
+        +'<table><thead><tr><th>対象月</th><th>予算ROOM</th><th>室料予算 円</th><th>販売可能室数</th></tr></thead><tbody>'+chk+'</tbody></table>'
         +'<div class="hint" style="margin-top:6px">FC-02のOCC・RevPAR・予算差が、この販売可能室数を使って計算されます。</div>';
       budStatus('取込完了','ok');
     }catch(e){out.innerHTML='<div class="impmsg bad">取込できません：'+esc((e&&e.message)||String(e))+'</div>';budStatus('取込失敗','bad');}
