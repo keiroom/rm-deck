@@ -72,6 +72,17 @@ nav.tabs button{flex:1 1 170px;background:transparent;border:0;border-right:1px 
   padding:12px 14px;cursor:pointer;text-align:left;transition:background .15s,color .15s;position:relative}
 nav.tabs button:last-child{border-right:0}
 nav.tabs button:hover{background:var(--panel2)}
+.status-sel{appearance:none;-webkit-appearance:none;border-radius:0;padding:4px 20px 4px 9px;min-width:104px;
+  font-family:var(--fx);font-size:10.5px;letter-spacing:.06em;font-weight:600;cursor:pointer;text-align:left;
+  background-image:linear-gradient(45deg,transparent 50%,#8FA6C8 50%),linear-gradient(135deg,#8FA6C8 50%,transparent 50%);
+  background-position:calc(100% - 13px) 50%,calc(100% - 8px) 50%;background-size:5px 5px,5px 5px;background-repeat:no-repeat}
+.status-sel:hover{filter:brightness(1.25)}
+.status-sel option{background:#111C33;color:#E8F1FF;font-family:var(--fx);font-size:12px}
+#rm-toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(140%);z-index:99;
+  display:flex;align-items:center;gap:12px;max-width:min(760px,92vw);padding:11px 16px;border:1px solid var(--cyan);
+  background:linear-gradient(180deg,rgba(34,225,255,.14),rgba(17,28,51,.97));color:#E8F1FF;
+  font-family:var(--fx);font-size:12.5px;box-shadow:0 14px 40px -12px #000;transition:transform .22s ease}
+#rm-toast.on{transform:translateX(-50%) translateY(0)}
 nav.tabs button .no{font-family:var(--fm);font-size:9px;letter-spacing:.22em;color:var(--dim)}
 nav.tabs button .nm{font-family:var(--fx);font-size:13px;letter-spacing:.1em;font-weight:600}
 nav.tabs button[aria-selected="true"]{background:var(--raise)}
@@ -371,6 +382,14 @@ dialog .formgrid>div{margin-bottom:2px}
 
 .budbox{border:1px solid var(--line2);background:var(--panel2);padding:12px;margin-bottom:14px}
 .budbox h3{font-family:var(--fx);font-size:12px;letter-spacing:.12em;color:var(--cyan);margin:0 0 8px}
+select.status-sel.status{
+  -webkit-appearance:none;appearance:none;
+  padding:4px 22px 4px 9px;border-radius:0;cursor:pointer;
+  background-image:linear-gradient(45deg,transparent 50%,#8FA6C8 50%),linear-gradient(135deg,#8FA6C8 50%,transparent 50%)!important;
+  background-position:calc(100% - 14px) 50%,calc(100% - 9px) 50%!important;
+  background-size:5px 5px,5px 5px!important;background-repeat:no-repeat!important;
+  font-family:var(--fx);font-size:10.5px;font-weight:600;letter-spacing:.06em;min-width:104px;width:104px}
+select.status-sel.status option{background:#111C33;color:#E8F1FF}
 </style>
 </head>
 <body>
@@ -553,6 +572,7 @@ dialog .formgrid>div{margin-bottom:2px}
       <span class="fc-save-st" id="bk-status">待機中</span>
     </div>
     <div class="hint" style="margin:10px 0">保存対象：タスク／アクションプラン／FC予算／FC予測値／確定実績／カレンダー予定／同期設定。<b>Driveへ保存</b>はカレンダー同期設定のURL（Google Apps Script）経由で、指定フォルダへ直接書き込みます。</div>
+    <div id="bk-local"></div>
     <div class="phead" style="margin-top:18px"><h2><b>▌</b> DRIVE上のバックアップ</h2><span class="sub" id="bk-sub">—</span></div>
     <div class="tablewrap" id="bk-list"></div>
   </section>
@@ -639,7 +659,9 @@ const FC = {"hist":[]};
 </script>
 <script>
 /* ================= state ================= */
-const KEY='acj_rm_deck_v1';
+const KEY='acj_rm_deck_v1';                 // ← 変更しない（会社PCの入力データが消えます）
+const BKEY=['acj_rm_deck_bak1','acj_rm_deck_bak2','acj_rm_deck_bak3'];
+const DATA_VER=2;
 const STATUS=['未着手','進行中','効果検証','完了'];
 const STCLS={'未着手':'st-new','進行中':'st-prog','効果検証':'st-check','完了':'st-done'};
 const COL={'未着手':'#3A5480','進行中':'#FFC400','効果検証':'#00C4E0','完了':'#3E4C63'};
@@ -657,12 +679,59 @@ function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;',
 function nid(prefix,arr){let n=0;arr.forEach(x=>{const m=String(x.id||'').match(/(\d+)$/);if(m)n=Math.max(n,+m[1]);});return prefix+String(n+1).padStart(2,'0');}
 
 let state=load();
-function load(){
-  try{const raw=localStorage.getItem(KEY);if(raw){const s=JSON.parse(raw);
-    if(s&&s.tasks&&s.actions){if(!s.fc)s.fc=JSON.parse(JSON.stringify(SEED.fc));if(!s.fc.actuals)s.fc.actuals=[];if(!s.calLocal)s.calLocal=[];if(!s.gcal)s.gcal=[];if(!s.tasks.length&&SEED.tasks.length)s.tasks=JSON.parse(JSON.stringify(SEED.tasks));if(!s.actions.length&&SEED.actions.length)s.actions=JSON.parse(JSON.stringify(SEED.actions));return s;}}}catch(e){}
-  return JSON.parse(JSON.stringify(SEED));
+function readKey(k){
+  try{const raw=localStorage.getItem(k);if(!raw)return null;const o=JSON.parse(raw);
+    if(!o||typeof o!=='object'||!Array.isArray(o.tasks)||!Array.isArray(o.actions))return null;return o;}catch(e){return null;}
 }
-function save(){try{localStorage.setItem(KEY,JSON.stringify(state));}catch(e){}}
+/* 旧バージョンのデータでも不足項目を補って必ず読めるようにする（スキーマ移行） */
+function migrate(s){
+  if(!s.fc)s.fc=JSON.parse(JSON.stringify(SEED.fc));
+  if(!Array.isArray(s.fc.budget))s.fc.budget=[];
+  if(!Array.isArray(s.fc.actuals))s.fc.actuals=[];
+  if(!Array.isArray(s.fc.entries))s.fc.entries=[];
+  if(!Array.isArray(s.calLocal))s.calLocal=[];
+  if(!Array.isArray(s.gcal))s.gcal=[];
+  if(!Array.isArray(s.cal))s.cal=[];
+  if(!s.tasks.length&&SEED.tasks.length)s.tasks=JSON.parse(JSON.stringify(SEED.tasks));
+  if(!s.actions.length&&SEED.actions.length)s.actions=JSON.parse(JSON.stringify(SEED.actions));
+  s.tasks.forEach(t=>{if(!t.status)t.status='未着手';});
+  s.actions.forEach(a=>{if(!a.status)a.status='未着手';});
+  s._v=DATA_VER;
+  return s;
+}
+function load(){
+  let s=readKey(KEY);
+  if(!s){                                  // 本体が読めない時は自動バックアップから復元
+    for(let i=0;i<BKEY.length;i++){const b=readKey(BKEY[i]);if(b){s=b;s.__recovered='#'+(i+1);break;}}
+  }
+  if(!s)return JSON.parse(JSON.stringify(SEED));
+  return migrate(s);
+}
+function isEmptyState(o){
+  if(!o)return true;
+  return (!o.tasks||!o.tasks.length)&&(!o.actions||!o.actions.length)&&(!o.calLocal||!o.calLocal.length)
+    &&(!o.gcal||!o.gcal.length)&&(!(o.fc&&(o.fc.entries||[]).length))&&(!(o.fc&&(o.fc.budget||[]).length));
+}
+function rotateBackup(raw){
+  try{for(let i=BKEY.length-1;i>0;i--){const v=localStorage.getItem(BKEY[i-1]);if(v)localStorage.setItem(BKEY[i],v);}
+    localStorage.setItem(BKEY[0],raw);}catch(e){}
+}
+let __forceSave=false,__bakDay='';
+function save(){
+  try{
+    const prev=localStorage.getItem(KEY);
+    let prevOk=null;try{prevOk=prev?JSON.parse(prev):null;}catch(e){}
+    // 空データで既存の入力を潰さない保護
+    if(!__forceSave&&prev&&prevOk&&!isEmptyState(prevOk)&&isEmptyState(state))return;
+    // 1日1回、直前の内容を自動バックアップへ退避（直近3世代）
+    const d=today();
+    if(prev&&prevOk&&!isEmptyState(prevOk)&&__bakDay!==d){rotateBackup(prev);__bakDay=d;}
+    localStorage.setItem(KEY,JSON.stringify(Object.assign({},state,{__at:new Date().toLocaleString('ja-JP')})));
+    localStorage.setItem(KEY+'_ok',d);
+  }catch(e){}
+}
+function saveForce(){__forceSave=true;save();__forceSave=false;}
+function STOPT(s){return STATUS.map(x=>'<option'+(x===s?' selected':'')+'>'+esc(x)+'</option>').join('');}
 function eStatus(t){return t.status||'未着手';}
 function eDate(t){return t.date||today();}
 function dueInfo(d){if(!d)return {cls:'due-ok',txt:'—'};
@@ -816,7 +885,7 @@ function dashTable(rows){
       <td class="hint">${esc(t.cat||'—')}</td>
       <td class="ttl">${esc(t.title||'')}</td>
       <td class="det"><div class="clamp2">${esc(t.detail||'')}</div></td>
-      <td><button class="status ${STCLS[s]}" data-cycle="${esc(t.id)}" title="クリックで状態を進める">${esc(s)}</button></td>
+      <td><select class="status status-sel ${STCLS[s]}" data-st-sel="${esc(t.id)}" data-st-kind="task" title="状態を選択">${STOPT(s)}</select></td>
       <td><span class="${di.cls}">${esc(di.txt)}</span></td>
       <td class="hint">${esc(t.owner||'—')}</td>
       <td><button class="iconbtn" data-edit="${esc(t.id)}">編集</button></td></tr>`;}).join('')}
@@ -837,7 +906,7 @@ function tableHTML(rows,kind){
         <td class="hint">${esc(t.cat||'—')}</td>
         <td class="ttl">${esc(t.title||'')}</td>
         <td class="det">${esc(t.detail||'')}</td>
-        <td><button class="status ${STCLS[s]}" data-cycle="${esc(t.id)}" title="クリックで状態を進める">${esc(s)}</button></td>
+        <td><select class="status status-sel ${STCLS[s]}" data-st-sel="${esc(t.id)}" data-st-kind="task" title="状態を選択">${STOPT(s)}</select></td>
         <td><span class="${di.cls}">${esc(di.txt)}</span></td>
         <td class="hint">${esc(t.owner||'—')}</td>
         <td class="num">${t.plan?esc(t.plan):'—'}</td>
@@ -859,7 +928,7 @@ function tableHTML(rows,kind){
       <td class="hint">${esc(a.cycle||'—')}</td>
       <td><span class="${di.cls}">${esc(di.txt)}</span></td>
       <td><div class="prog"><div class="track"><div class="fill" style="width:${p}%"></div></div><span>${p}%</span></div></td>
-      <td><button class="status ${STCLS[s]}" data-acycle="${esc(a.id)}" title="クリックで状態を進める">${esc(s)}</button></td>
+      <td><select class="status status-sel ${STCLS[s]}" data-st-sel="${esc(a.id)}" data-st-kind="act" title="状態を選択">${STOPT(s)}</select></td>
       <td class="hint">${esc(fmtMD(a.review))}</td>
       <td><div class="rowbtns"><button class="iconbtn" data-aedit="${esc(a.id)}">編集</button>
         <button class="iconbtn del" data-adel="${esc(a.id)}">削除</button></div></td></tr>`;}).join('')}
@@ -2150,6 +2219,58 @@ document.getElementById('editor-delete').addEventListener('click',()=>{
   document.getElementById('editor').close();
 });
 
+/* ---------- ブラウザ内 自動バックアップ ---------- */
+function bakMeta(k){
+  try{const raw=localStorage.getItem(k);if(!raw)return null;const o=JSON.parse(raw);
+    return {size:raw.length,tasks:(o.tasks||[]).length,actions:(o.actions||[]).length,
+      entries:((o.fc&&o.fc.entries)||[]).length,budget:((o.fc&&o.fc.budget)||[]).length,cal:(o.calLocal||[]).length};}catch(e){return null;}
+}
+function renderLocalBaks(){
+  const host=document.getElementById('bk-local');if(!host)return;
+  const cur=readKey(KEY);
+  const list=BKEY.map((k,i)=>{const m=bakMeta(k);return m?{k:k,n:i+1,m:m}:null;}).filter(Boolean);
+  let h='<div class="phead" style="margin-top:18px"><h2><b>▌</b> ブラウザ内 自動バックアップ</h2>'
+    +'<span class="sub">1日1回・直近3世代を自動保存</span></div>'
+    +'<div class="hint" style="margin:8px 0">アプリ（index.html）を差し替えても、このブラウザの入力データは消えません。万一に備え、この自動バックアップから戻せます。'
+    +'現在のデータ：タスク '+(cur?cur.tasks.length:0)+'件／アクション '+(cur?cur.actions.length:0)+'件／FC予測 '+((cur&&cur.fc)?(cur.fc.entries||[]).length:0)+'件／カレンダー '+((cur&&cur.calLocal)?cur.calLocal.length:0)+'件</div>';
+  h+=list.length
+    ?'<div class="tablewrap"><table><thead><tr><th style="width:80px">世代</th><th>保存内容</th><th class="num" style="width:100px">サイズ</th><th style="width:170px"></th></tr></thead><tbody>'
+      +list.map(x=>'<tr><td class="ttl">#'+x.n+'</td><td class="hint">タスク '+x.m.tasks+'件／アクション '+x.m.actions+'件／FC予測 '+x.m.entries+'件／予算 '+x.m.budget+'件／カレンダー '+x.m.cal+'件</td>'
+        +'<td class="num">'+Math.max(1,Math.round(x.m.size/1024))+' KB</td>'
+        +'<td><button class="iconbtn" data-bakrestore="'+x.k+'">この世代に復元</button></td></tr>').join('')
+      +'</tbody></table></div>'
+    :'<div class="empty">まだ自動バックアップがありません（データを保存すると作られます）</div>';
+  h+='<div style="margin-top:10px"><button class="btn" id="bak-now">🛟 今すぐ自動バックアップを取る</button>'
+    +'<span class="hint" style="margin-left:10px">保存のたびに自動で更新されます</span></div>';
+  host.innerHTML=h;
+}
+/* 状態プルダウン（任意の状態へ直接変更） */
+function toast(msg,undoLabel,undoFn){
+  try{
+    let t=document.getElementById('rm-toast');
+    if(!t){t=document.createElement('div');t.id='rm-toast';document.body.appendChild(t);}
+    t.innerHTML='<span>'+esc(msg)+'</span>'+(undoFn?'<button class="btn" id="rm-undo">'+esc(undoLabel||'元に戻す')+'</button>':'');
+    window.__undo=undoFn||null;
+    t.classList.add('on');
+    clearTimeout(window.__tt);window.__tt=setTimeout(()=>{t.classList.remove('on');},9000);
+  }catch(e){}
+}
+document.addEventListener('change',ev=>{
+  const sel=ev.target.closest&&ev.target.closest('[data-st-sel]');if(!sel)return;
+  const id=sel.dataset.stSel,isAct=sel.dataset.stKind==='act';
+  const arr=isAct?state.actions:state.tasks,rec=arr.find(x=>x.id===id);if(!rec)return;
+  const prev=isAct?eAStatus(rec):eStatus(rec),prevProg=rec.progress,next=sel.value;
+  if(next===prev)return;
+  rec.status=next;
+  if(isAct)rec.progress=next==='完了'?1:next==='効果検証'?0.8:next==='進行中'?0.5:0;
+  save();render();
+  const gone=(isAct?afstate.status.size:fstate.status.size)&&!(isAct?afstate.status.has(next):fstate.status.has(next));
+  toast((rec.id||'')+' '+(rec.title||'')+'：'+prev+' → '+next+(gone?'（絞り込みのため非表示になります）':''),
+    '元に戻す',function(){
+      const r=(isAct?state.actions:state.tasks).find(x=>x.id===id);if(!r)return;
+      r.status=prev;r.progress=prevProg;save();render();toast((r.id||'')+' を '+prev+' に戻しました',null,null);
+    });
+});
 /* ================= events ================= */
 document.querySelectorAll('nav.tabs button[data-tab]').forEach(b=>b.addEventListener('click',()=>{
   document.querySelectorAll('nav.tabs button[data-tab]').forEach(x=>x.setAttribute('aria-selected',String(x===b)));
@@ -2204,9 +2325,22 @@ document.getElementById('imp-json').addEventListener('click',()=>{
     r.readAsText(f);};
   i.click();
 });
+document.addEventListener('click',ev=>{
+  const b=ev.target.closest&&ev.target.closest('[data-bakrestore]');
+  if(b){
+    if(!confirm('この世代の内容に戻します（現在の内容は上書きされます）。よろしいですか？'))return;
+    const o=readKey(b.dataset.bakrestore);if(!o)return;
+    state=migrate(o);saveForce();render();try{renderLocalBaks();}catch(e){}toast('自動バックアップから復元しました',null,null);return;
+  }
+  if(ev.target.closest&&ev.target.closest('#bak-now')){
+    const raw=localStorage.getItem(KEY);
+    if(!raw||isEmptyState(state)){toast('保存できるデータがありません',null,null);return;}
+    rotateBackup(raw);try{renderLocalBaks();}catch(e){}toast('自動バックアップを取得しました',null,null);
+  }
+});
 document.getElementById('reset').addEventListener('click',()=>{
   if(confirm('このブラウザの入力内容を消して、初期データ（Excelの内容）に戻します。よろしいですか？')){
-    state=JSON.parse(JSON.stringify(SEED));save();render();}
+    state=JSON.parse(JSON.stringify(SEED));saveForce();render();}
 });
 
 /* clock */
@@ -2218,8 +2352,13 @@ tick();setInterval(tick,1000);
 render();
 renderCal();
 syncLabel();
+try{renderLocalBaks();}catch(e){}
 if(syncCfg.url&&syncCfg.auto)setTimeout(()=>syncGoogle(false),600);
 setInterval(()=>{if(syncCfg.url&&syncCfg.auto&&document.visibilityState!=='hidden')syncGoogle(false);},Math.max(5,syncCfg.min||15)*60000);
+/* タブを閉じる／切り替える直前でも入力を確実に保存 */
+window.addEventListener('beforeunload',()=>{try{save();}catch(e){}});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'){try{save();}catch(e){}}});
+if(state.__recovered){setTimeout(()=>toast('本体データが読めなかったため、自動バックアップ'+state.__recovered+'から復元しました',null,null),400);delete state.__recovered;}
 
 /* account (own email) — public build keeps this blank by default */
 (function(){try{
